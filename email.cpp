@@ -131,11 +131,36 @@ void unload_users(Users* users) {
 	delete users;
 }
 
+void main_menu(Users* users) {
+	while (true) {
+		cout << "Available commands:" << endl;
+		cout << "(L) Login" << endl;
+		cout << "(R) Register" << endl;
+		cout << "(Q) Quit" << endl;
+		cout << "Select command: ";
+
+		string cmd;
+		cin >> cmd;
+
+		if (cmd == "L") {
+
+		} else if (cmd == "R") {
+
+		} else if (cmd == "Q") {
+			break;
+		} else {
+			cout << "Unrecognized command `" << cmd << "`." << endl;
+		}
+	}
+}
+
 void run_email() {
 	Users* users = load_users();
 
 	if (users == nullptr) {
 		cout << "An error occurred during loading users" << endl;
+	} else {
+		main_menu(users);
 	}
 
 	unload_users(users);
