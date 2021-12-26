@@ -18,6 +18,7 @@
 
 #include <string>
 #include <fstream>
+#include <sstream>
 #include <iostream>
 #include <map>
 
@@ -25,10 +26,10 @@ using namespace std;
 
 struct Users {
 	ofstream outfile;
-	map<string, string> users_passwords;
+	map<string, size_t> users_passwords;
 };
 
-string get_users_file_path () {
+string get_users_file_path() {
 	const string USERS_FILE_PATH = "users.txt";
 	return USERS_FILE_PATH;
 }
@@ -48,7 +49,7 @@ Users* save_users(Users* users) {
 	}
 
 	for (auto it = users->users_passwords.begin(); it != users->users_passwords.end(); it++) {
-		string line = it->first + get_users_file_delim() + it->second;
+		string line = it->first + get_users_file_delim() + to_string(it->second);
 		users->outfile << line << endl;
 	}
 
@@ -70,7 +71,7 @@ Users* save_users(Users* users) {
 }
 
 Users* load_users() {
-	Users* users = new Users();
+	Users* users = new Users{};
 
 	users->outfile.open(get_users_file_path(), ofstream::app);
 
@@ -100,17 +101,22 @@ Users* load_users() {
 		}
 
 		const string username = line.substr(0, delimiter_idx);
-		const string password = line.substr(delimiter_idx + 1, string::npos);
+		const string password_str = line.substr(delimiter_idx + 1, string::npos);
+
+		stringstream password_stream(password_str);
+		size_t password;
+		password_stream >> password;
 
 		bool entry_exists = (users->users_passwords.find(username) != users->users_passwords.end());
+		bool invalid_password = (to_string(password) != password_str);
 
-		if (entry_exists) {
+		if (entry_exists || invalid_password) {
 			is_save_users_required = true;
 			continue;
 		}
 
 		users->users_passwords[username] = password;
-		cout << username << ", " << password << endl;
+		cout << username << ", " << password << endl; // TODO delete
 	}
 
 	if (infile.bad()) {
@@ -131,6 +137,34 @@ void unload_users(Users* users) {
 	delete users;
 }
 
+void mailbox_prompt(Users* users, string username) {
+
+}
+
+void login_prompt(Users* users) {
+	string username;
+	cout << "Enter username: ";
+	cin >> username;
+
+	string password;
+	cout << "Enter password: ";
+	cin >> password;
+
+	if (users->users_passwords.find(username) == users->users_passwords.end()) {
+		cout << "Invalid credentials!" << endl;
+		return;
+	}
+
+	size_t hashed_password = hash<string>{}(password);
+
+	if (hashed_password != users->users_passwords.at(username)) {
+		cout << "Invalid credentials!" << endl;
+		return;
+	}
+
+	mailbox_prompt(users, username);
+}
+
 void main_menu(Users* users) {
 	while (true) {
 		cout << "Available commands:" << endl;
@@ -143,7 +177,7 @@ void main_menu(Users* users) {
 		cin >> cmd;
 
 		if (cmd == "L") {
-
+			login_prompt(users);
 		} else if (cmd == "R") {
 
 		} else if (cmd == "Q") {
