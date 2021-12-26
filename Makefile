@@ -1,4 +1,4 @@
-CXXFLAGS = -g -Wall -pedantic
+CXXFLAGS = -g -Wall -pedantic -std=c++17
 
 OBJ = email.o
 
