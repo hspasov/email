@@ -13,46 +13,136 @@
 *
 */
 
+// Assumptions:
+// - if users.txt contains multiple passwords for a given user, the first is used and the others are deleted
+
 #include <string>
 #include <fstream>
 #include <iostream>
 #include <map>
 
+using namespace std;
+
 struct Users {
-	std::ofstream* outfile;
-	std::map<std::string, std::string> usersPasswords;
+	ofstream outfile;
+	map<string, string> users_passwords;
 };
 
-void load_users(struct Users* users) {
-	const std::string USERS_FILE_PATH = "users.txt";
+string get_users_file_path () {
+	const string USERS_FILE_PATH = "users.txt";
+	return USERS_FILE_PATH;
+}
 
-	users->outfile = new std::ofstream(USERS_FILE_PATH, std::ofstream::app);
-	std::ifstream infile(USERS_FILE_PATH);
+string get_users_file_delim() {
+	const string DELIM = ":";
+	return DELIM;
+}
 
-	std::string line;
+Users* save_users(Users* users) {
+	users->outfile.close();
+	users->outfile.open(get_users_file_path(), ofstream::out | ofstream::trunc);
 
-	while (infile >> line) {
-		// TODO handle errors
-		const std::string DELIMITER = ":";
-		const size_t delimiter_idx = line.rfind(DELIMITER);
-		const std::string username = line.substr(0, delimiter_idx);
-		const std::string password = line.substr(delimiter_idx + 1, std::string::npos);
-
-		std::cout << username << "," << password << std::endl;
+	if (users->outfile.fail()) {
+		perror("E0001");
+		return nullptr;
 	}
 
+	for (auto it = users->users_passwords.begin(); it != users->users_passwords.end(); it++) {
+		string line = it->first + get_users_file_delim() + it->second;
+		users->outfile << line << endl;
+	}
+
+	users->outfile.close();
+
+	if (users->outfile.bad()) {
+		perror("E0002");
+		return nullptr;
+	}
+
+	users->outfile.open(get_users_file_path(), ofstream::app);
+
+	if (users->outfile.fail()) {
+		perror("E0003");
+		return nullptr;
+	}
+
+	return users;
 }
 
-void release_users(struct Users* users) {
-	delete users->outfile;
+Users* load_users() {
+	Users* users = new Users();
+
+	users->outfile.open(get_users_file_path(), ofstream::app);
+
+	if (users->outfile.fail()) {
+		perror("E0004");
+		return nullptr;
+	}
+
+	ifstream infile(get_users_file_path());
+
+	if (!infile) {
+		perror("E0005");
+		return nullptr;
+	}
+
+	bool is_save_users_required = false;
+	string line;
+
+	while (getline(infile, line)) {
+		const size_t delimiter_idx = line.rfind(get_users_file_delim());
+
+		bool invalid_entry = (delimiter_idx == string::npos);
+
+		if (invalid_entry) {
+			is_save_users_required = true;
+			continue;
+		}
+
+		const string username = line.substr(0, delimiter_idx);
+		const string password = line.substr(delimiter_idx + 1, string::npos);
+
+		bool entry_exists = (users->users_passwords.find(username) != users->users_passwords.end());
+
+		if (entry_exists) {
+			is_save_users_required = true;
+			continue;
+		}
+
+		users->users_passwords[username] = password;
+		cout << username << ", " << password << endl;
+	}
+
+	if (infile.bad()) {
+		perror("E0006");
+		return nullptr;
+	}
+
+	if (is_save_users_required) {
+		if(!save_users(users)) {
+			return nullptr;
+		}
+	}
+
+	return users;
 }
 
-int main () {
-	struct Users users;
+void unload_users(Users* users) {
+	delete users;
+}
 
-	load_users(&users);
+void run_email() {
+	Users* users = load_users();
 
-	release_users(&users);
+	if (users == nullptr) {
+		cout << "An error occurred during loading users" << endl;
+	}
 
+	unload_users(users);
+}
+
+int main() {
+	run_email();
+	
 	return 0;
 }
