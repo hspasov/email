@@ -16,6 +16,7 @@
 // Assumptions:
 // - if users.txt contains multiple passwords for a given user, the first is used and the others are deleted
 // - an attempt to register a user with existing username fails
+// - the number of mails in mailbox is determined by the largest <ID> in the user's dir
 
 #include <string>
 #include <fstream>
@@ -25,14 +26,29 @@
 #include <regex>
 #include <filesystem>
 #include <system_error>
+#include <set>
 
-// TODO define consts for return codes
+#define SAVE_USERS_OPEN_FOR_WRITE_FAILED 1
+#define SAVE_USERS_WRITE_FAILED 2
+#define SAVE_USERS_OPEN_FOR_APPEND_FAILED 3
+#define LOAD_USERS_OPEN_FOR_APPEND_FAILED 4
+#define LOAD_USERS_OPEN_FOR_READ_FAILED 5
+#define LOAD_USERS_READ_FAILED 6
+#define REGISTER_PROMPT_CREATE_DIR_FAILED 7
+#define LOAD_MAILBOX_READ_DIR_FAILED 8
+#define LOAD_MAILBOX_CHECK_FILE_TYPE_FAILED 9
 
 using namespace std;
 
 struct Users {
 	ofstream outfile;
 	map<string, size_t> users_passwords;
+};
+
+struct Mailbox {
+	size_t mails_count;
+	set<size_t> mails;
+	string username;
 };
 
 string get_users_file_path() {
@@ -51,11 +67,11 @@ int save_users(Users* users) {
 
 	if (users->outfile.fail()) {
 		perror("E0001");
-		return 1;
+		return SAVE_USERS_OPEN_FOR_WRITE_FAILED;
 	}
 
-	for (auto it = users->users_passwords.begin(); it != users->users_passwords.end(); it++) {
-		string line = it->first + get_users_file_delim() + to_string(it->second);
+	for (auto entry : users->users_passwords) {
+		string line = entry.first + get_users_file_delim() + to_string(entry.second);
 		users->outfile << line << endl;
 	}
 
@@ -63,14 +79,14 @@ int save_users(Users* users) {
 
 	if (users->outfile.bad()) {
 		perror("E0002");
-		return 2;
+		return SAVE_USERS_WRITE_FAILED;
 	}
 
 	users->outfile.open(get_users_file_path(), ofstream::app);
 
 	if (users->outfile.fail()) {
 		perror("E0003");
-		return 3;
+		return SAVE_USERS_OPEN_FOR_APPEND_FAILED;
 	}
 
 	return 0;
@@ -93,14 +109,14 @@ int load_users(Users* users) {
 
 	if (users->outfile.fail()) {
 		perror("E0004");
-		return 4;
+		return LOAD_USERS_OPEN_FOR_APPEND_FAILED;
 	}
 
 	ifstream infile(get_users_file_path());
 
 	if (!infile) {
 		perror("E0005");
-		return 5;
+		return LOAD_USERS_OPEN_FOR_READ_FAILED;
 	}
 
 	bool is_save_users_required = false;
@@ -138,7 +154,7 @@ int load_users(Users* users) {
 
 	if (infile.bad()) {
 		perror("E0006");
-		return 6;
+		return LOAD_USERS_READ_FAILED;
 	}
 
 	if (is_save_users_required) {
@@ -148,11 +164,113 @@ int load_users(Users* users) {
 	return 0;
 }
 
-int mailbox_prompt(Users* users, string username) {
+size_t get_mail_number(const string filename) {
+	smatch matches;
+
+	if (regex_search(filename, matches, regex("^([1-9][0-9]*)\\.txt$"))) {
+		stringstream mail_number_stream(matches[1]);
+		size_t mail_number;
+		mail_number_stream >> mail_number;
+
+		return mail_number;
+	} else {
+		return 0;
+	}
+}
+
+int load_mailbox(Mailbox* mailbox, string username) {
+	mailbox->username = username;
+
+	error_code ec;
+
+	for (auto dir_entry : filesystem::directory_iterator(username, ec)) {
+		if (!dir_entry.is_regular_file(ec)) {
+			if (ec) {
+				cout << ec.message() << endl;
+				return LOAD_MAILBOX_CHECK_FILE_TYPE_FAILED;
+			}
+
+			continue;
+		}
+
+		size_t mail_number = get_mail_number(dir_entry.path().filename().string());
+		
+		if (mail_number == 0) {
+			// invalid mail number, skipping
+			continue;
+		}
+
+		mailbox->mails.insert(mail_number);
+	}
+
+	if (ec) {
+		cout << ec.message() << endl;
+		return LOAD_MAILBOX_READ_DIR_FAILED;
+	}
+
+	if (mailbox->mails.size() == 0) {
+		mailbox->mails_count = 0;
+	} else {
+		mailbox->mails_count = *(mailbox->mails.rbegin());
+	}
+
 	return 0;
 }
 
+int mailbox_menu(Users* users, Mailbox* mailbox) {
+	while (true) {
+		cout << "--------------------------------------------------" << endl;
+		cout << "You have " << mailbox->mails_count << " mails. Choose of the following options:" << endl;
+		cout << "C - close account" << endl;
+		cout << "I - inbox" << endl;
+		cout << "L - logout" << endl;
+		cout << "O - open" << endl;
+		cout << "S - send" << endl;
+		cout << "Choose option: ";
+
+		string cmd;
+		cin >> cmd;
+
+		int result_status = 0;
+
+		if (cmd == "C") {
+			// TODO
+		} else if (cmd == "I") {
+			// TODO
+		} else if (cmd == "L") {
+			break;
+		} else if (cmd == "O") {
+			// TODO
+		} else if (cmd == "S") {
+			// TODO
+		} else {
+			cout << "Unrecognized option `" << cmd << "`." << endl;
+		}
+
+		if (result_status != 0) {
+			return result_status;
+		}
+	}
+
+	return 0;
+}
+
+int enter_mailbox(Users* users, string username) {
+	Mailbox mailbox;
+
+	int status_code = load_mailbox(&mailbox, username);
+
+	if (status_code != 0) {
+		cout << "An error occurred during loading mailbox" << endl;
+	} else {
+		status_code = mailbox_menu(users, &mailbox);
+	}
+
+	return status_code;
+}
+
 int login_prompt(Users* users) {
+	cout << "----------------" << endl;
 	cout << "Enter username: ";
 	string username;
 	cin >> username;
@@ -173,10 +291,11 @@ int login_prompt(Users* users) {
 		return 0;
 	}
 
-	return mailbox_prompt(users, username);
+	return enter_mailbox(users, username);
 }
 
 int register_prompt(Users* users) {
+	cout << "----------------" << endl;
 	cout << "Enter username: ";
 	string username;
 	cin >> username;
@@ -207,7 +326,7 @@ int register_prompt(Users* users) {
 
 	if (!filesystem::create_directory(username, ec) && ec) {
 		cout << ec.message() << endl;
-		return 7;
+		return REGISTER_PROMPT_CREATE_DIR_FAILED;
 	}
 
 	int save_status_code = save_users(users);
@@ -216,16 +335,17 @@ int register_prompt(Users* users) {
 		return save_status_code;
 	}
 
-	return mailbox_prompt(users, username);
+	return enter_mailbox(users, username);
 }
 
 int main_menu(Users* users) {
 	while (true) {
-		cout << "Available commands:" << endl;
-		cout << "(L) Login" << endl;
-		cout << "(R) Register" << endl;
-		cout << "(Q) Quit" << endl;
-		cout << "Select command: ";
+		cout << "------------------------------------" << endl;
+		cout << "Choose one of the following options:" << endl;
+		cout << "L - Login" << endl;
+		cout << "R - Register" << endl;
+		cout << "Q - Quit" << endl;
+		cout << "Choose option: ";
 
 		string cmd;
 		cin >> cmd;
@@ -239,7 +359,7 @@ int main_menu(Users* users) {
 		} else if (cmd == "Q") {
 			break;
 		} else {
-			cout << "Unrecognized command `" << cmd << "`." << endl;
+			cout << "Unrecognized option `" << cmd << "`." << endl;
 		}
 
 		if (result_status != 0) {
