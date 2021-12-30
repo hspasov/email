@@ -37,8 +37,11 @@
 #define REGISTER_PROMPT_CREATE_DIR_FAILED 7
 #define LOAD_MAILBOX_READ_DIR_FAILED 8
 #define LOAD_MAILBOX_CHECK_FILE_TYPE_FAILED 9
-#define DELETE_USER_FAILED 10;
-#define DELETE_USER_DELETE_DIR_FAILED 11;
+#define DELETE_USER_FAILED 10
+#define DELETE_USER_DELETE_DIR_FAILED 11
+#define READ_MAIL_OPEN_FILE_FAILED 12
+#define READ_MAIL_READ_FILE_FAILED 13
+#define READ_MAIL_INVALID_MAIL 14
 
 using namespace std;
 
@@ -53,6 +56,13 @@ struct Mailbox {
 	string username;
 };
 
+struct Mail {
+	size_t number;
+	string from;
+	string subject;
+	string content;
+};
+
 string get_users_file_path() {
 	const string USERS_FILE_PATH = "users.txt";
 	return USERS_FILE_PATH;
@@ -61,6 +71,13 @@ string get_users_file_path() {
 string get_users_file_delim() {
 	const string DELIM = ":";
 	return DELIM;
+}
+
+string get_mail_filepath(Mailbox* mailbox, size_t mail_number) {
+	filesystem::path dir(mailbox->username);
+	filesystem::path file(to_string(mail_number) + ".txt");
+	filesystem::path full_path = dir / file;
+	return full_path.string();
 }
 
 int save_users(Users* users) {
@@ -147,6 +164,74 @@ int delete_user_prompt(Users* users, Mailbox* mailbox) {
 	return delete_user(users, mailbox);
 }
 
+int read_mail(Mailbox* mailbox, size_t mail_number, Mail* mail) {
+	ifstream infile(get_mail_filepath(mailbox, mail_number));
+
+	if (!infile) {
+		perror("E0012");
+		return READ_MAIL_OPEN_FILE_FAILED;
+	}
+
+	const int LINES_TO_READ = 3;
+	int lines_read = 0;
+
+	string lines[LINES_TO_READ];
+
+	while (getline(infile, lines[lines_read++]) && lines_read < LINES_TO_READ);
+
+	if (infile.bad()) {
+		perror("E0013");
+		return READ_MAIL_READ_FILE_FAILED;
+	}
+
+	if (lines_read < LINES_TO_READ) {
+		cout << "An error has occurred during reading mails." << endl;
+		return READ_MAIL_INVALID_MAIL;
+	}
+
+	string lines_patterns[] = {
+		"^From: (.*)$",
+		"^Subject: (.*)$",
+		"^Content: (.*)$"
+	};
+
+	string mail_parts[LINES_TO_READ];
+
+	for (int i = 0; i < LINES_TO_READ; i++) {
+		smatch matches;
+
+		if (regex_search(lines[i], matches, regex(lines_patterns[i]))) {
+			mail_parts[i] = matches[1];
+		} else {
+			cout << "An error has occurred during reading mails." << endl;
+			return READ_MAIL_INVALID_MAIL;
+		}
+	}
+
+	mail->from = mail_parts[0];
+	mail->subject = mail_parts[1];
+	mail->content = mail_parts[2];
+	mail->number = mail_number;
+
+	return 0;
+}
+
+int list_mailbox(Mailbox* mailbox) {
+	for (size_t mail_number : mailbox->mails) {
+		Mail mail;
+
+		int result_status = read_mail(mailbox, mail_number, &mail);
+
+		if (result_status != 0) {
+			return result_status;
+		}
+
+		cout << "(" << mail.number << ") " << mail.subject << endl;
+	}
+
+	return 0;
+}
+
 int load_users(Users* users) {
 	users->outfile.open(get_users_file_path(), ofstream::app);
 
@@ -192,7 +277,6 @@ int load_users(Users* users) {
 		}
 
 		users->users_passwords[username] = password;
-		cout << username << ", " << password << endl; // TODO delete
 	}
 
 	if (infile.bad()) {
@@ -284,7 +368,7 @@ int mailbox_menu(Users* users, Mailbox* mailbox) {
 				break;
 			}
 		} else if (cmd == "I") {
-			// TODO
+			result_status = list_mailbox(mailbox);
 		} else if (cmd == "L") {
 			break;
 		} else if (cmd == "O") {
