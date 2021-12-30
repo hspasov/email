@@ -37,6 +37,8 @@
 #define REGISTER_PROMPT_CREATE_DIR_FAILED 7
 #define LOAD_MAILBOX_READ_DIR_FAILED 8
 #define LOAD_MAILBOX_CHECK_FILE_TYPE_FAILED 9
+#define DELETE_USER_FAILED 10;
+#define DELETE_USER_DELETE_DIR_FAILED 11;
 
 using namespace std;
 
@@ -102,6 +104,47 @@ bool is_valid_password(const string password) {
 		regex_search(password, regex("[0-9]")) &&
 		regex_search(password, regex("[&*<>?.+-]")) &&
 		regex_match(password, regex("^[a-zA-Z0-9&*<>?.+-]{6,}$"));
+}
+
+int delete_user(Users* users, Mailbox* mailbox) {
+	if (users->users_passwords.erase(mailbox->username) != 1) {
+		cout << "An error has occurred during deleting user." << endl;
+		return DELETE_USER_FAILED;
+	}
+
+	int save_status_code = save_users(users);
+
+	if (save_status_code != 0) {
+		return save_status_code;
+	}
+
+	error_code ec;
+
+	if (filesystem::remove_all(mailbox->username, ec) == static_cast<uintmax_t>(-1)) {
+		cout << ec.message() << endl;
+		return DELETE_USER_DELETE_DIR_FAILED;
+	}
+
+	cout << "Successfully deleted user." << endl;
+
+	return 0;
+}
+
+int delete_user_prompt(Users* users, Mailbox* mailbox) {
+	cout << "--------------------------------" << endl;
+	cout << "THIS WILL DELETE USER `" << mailbox->username << "` AND ALL OF ITS EMAILS! THIS CANNOT BE UNDONE! PLEASE ENTER USER'S PASSWORD TO CONFIRM!" << endl;
+	cout << "Password: ";
+	string password;
+	cin >> password;
+
+	size_t hashed_password = hash<string>{}(password);
+
+	if (hashed_password != users->users_passwords.at(mailbox->username)) {
+		cout << "Invalid credentials!" << endl;
+		return 0;
+	}
+
+	return delete_user(users, mailbox);
 }
 
 int load_users(Users* users) {
@@ -234,7 +277,12 @@ int mailbox_menu(Users* users, Mailbox* mailbox) {
 		int result_status = 0;
 
 		if (cmd == "C") {
-			// TODO
+			result_status = delete_user_prompt(users, mailbox);
+			bool is_user_deleted = (users->users_passwords.find(mailbox->username) == users->users_passwords.end());
+
+			if (result_status == 0 && is_user_deleted) {
+				break;
+			}
 		} else if (cmd == "I") {
 			// TODO
 		} else if (cmd == "L") {
@@ -261,7 +309,7 @@ int enter_mailbox(Users* users, string username) {
 	int status_code = load_mailbox(&mailbox, username);
 
 	if (status_code != 0) {
-		cout << "An error occurred during loading mailbox" << endl;
+		cout << "An error has occurred during loading mailbox." << endl;
 	} else {
 		status_code = mailbox_menu(users, &mailbox);
 	}
