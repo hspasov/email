@@ -42,6 +42,8 @@
 #define READ_MAIL_OPEN_FILE_FAILED 12
 #define READ_MAIL_READ_FILE_FAILED 13
 #define READ_MAIL_INVALID_MAIL 14
+#define SEND_MAIL_CREATE_FILE_FAILED 15
+#define SEND_MAIL_WRITE_FILE_FAILED 16
 
 using namespace std;
 
@@ -189,28 +191,9 @@ int read_mail(Mailbox* mailbox, size_t mail_number, Mail* mail) {
 		return READ_MAIL_INVALID_MAIL;
 	}
 
-	string lines_patterns[] = {
-		"^From: (.*)$",
-		"^Subject: (.*)$",
-		"^Content: (.*)$"
-	};
-
-	string mail_parts[LINES_TO_READ];
-
-	for (int i = 0; i < LINES_TO_READ; i++) {
-		smatch matches;
-
-		if (regex_search(lines[i], matches, regex(lines_patterns[i]))) {
-			mail_parts[i] = matches[1];
-		} else {
-			cout << "An error has occurred during reading mails." << endl;
-			return READ_MAIL_INVALID_MAIL;
-		}
-	}
-
-	mail->from = mail_parts[0];
-	mail->subject = mail_parts[1];
-	mail->content = mail_parts[2];
+	mail->from = lines[0];
+	mail->subject = lines[1];
+	mail->content = lines[2];
 	mail->number = mail_number;
 
 	return 0;
@@ -378,6 +361,67 @@ int load_mailbox(Mailbox* mailbox, string username) {
 	return 0;
 }
 
+int send_mail(Users* users, Mail* mail, string recipient) {
+	if (users->users_passwords.find(recipient) == users->users_passwords.end()) {
+		cout << "Recipient `" << recipient << "` does not exist." << endl;
+		return 0;
+	}
+
+	Mailbox recipient_mailbox;
+
+	int status_code = load_mailbox(&recipient_mailbox, recipient);
+
+	if (status_code != 0) {
+		cout << "An error has occurred during sending mail." << endl;
+		return status_code;
+	}
+
+	mail->number = recipient_mailbox.mails_count + 1;
+
+	ofstream outfile(get_mail_filepath(&recipient_mailbox, mail->number), ofstream::app);
+
+	if (outfile.fail()) {
+		perror("E0015");
+		return SEND_MAIL_CREATE_FILE_FAILED;
+	}
+
+	outfile << mail->from << endl;
+	outfile << mail->subject << endl;
+	outfile << mail->content << endl;
+
+	outfile.close();
+
+	if (outfile.bad()) {
+		perror("E0016");
+		return SEND_MAIL_WRITE_FILE_FAILED;
+	}
+
+	cout << "Successfully sent email." << endl;
+
+	return 0;
+}
+
+int send_mail_prompt(Users* users, Mailbox* sender_mailbox) {
+	cout << "To: ";
+	string recipient;
+	cin >> recipient;
+
+	// throw away the rest of the line
+	char c;
+	while(cin.get(c) && c != '\n');
+
+	Mail mail;
+	mail.from = sender_mailbox->username;
+
+	cout << "Subject: ";
+	getline(cin, mail.subject);
+
+	cout << "Content: ";
+	getline(cin, mail.content);
+
+	return send_mail(users, &mail, recipient);
+}
+
 int mailbox_menu(Users* users, Mailbox* mailbox) {
 	while (true) {
 		cout << "--------------------------------------------------" << endl;
@@ -408,7 +452,7 @@ int mailbox_menu(Users* users, Mailbox* mailbox) {
 		} else if (cmd == "O") {
 			result_status = open_mail_prompt(mailbox);
 		} else if (cmd == "S") {
-			// TODO
+			result_status = send_mail_prompt(users, mailbox);
 		} else {
 			cout << "Unrecognized option `" << cmd << "`." << endl;
 		}
