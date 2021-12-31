@@ -232,6 +232,40 @@ int list_mailbox(Mailbox* mailbox) {
 	return 0;
 }
 
+int open_mail(Mailbox* mailbox, size_t mail_number) {
+	if (mailbox->mails.find(mail_number) == mailbox->mails.end()) {
+		cout << "There is no mail with this number." << endl;
+		return 0;
+	}
+
+	Mail mail;
+
+	int result_status = read_mail(mailbox, mail_number, &mail);
+
+	if (result_status != 0) {
+		return result_status;
+	}
+
+	cout << "From: " << mail.from << endl;
+	cout << "Subject: " << mail.subject << endl;
+	cout << "Content: " << mail.content << endl;
+
+	return 0;
+}
+
+int open_mail_prompt(Mailbox* mailbox) {
+	cout << "Enter mail number: ";
+	size_t mail_number;
+	cin >> mail_number;
+
+	if (!cin) {
+		cout << "Invalid mail number." << endl;
+		return 0;
+	}
+
+	return open_mail(mailbox, mail_number);
+}
+
 int load_users(Users* users) {
 	users->outfile.open(get_users_file_path(), ofstream::app);
 
@@ -372,7 +406,7 @@ int mailbox_menu(Users* users, Mailbox* mailbox) {
 		} else if (cmd == "L") {
 			break;
 		} else if (cmd == "O") {
-			// TODO
+			result_status = open_mail_prompt(mailbox);
 		} else if (cmd == "S") {
 			// TODO
 		} else {
