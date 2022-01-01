@@ -1,6 +1,6 @@
 CXXFLAGS = -g -Wall -pedantic -std=c++17
 
-OBJ = email.o
+OBJ = email.o users.o auth.o mail.o mailbox.o
 
 OUT = email
 
